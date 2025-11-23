@@ -1,28 +1,34 @@
 import { NextResponse } from 'next/server'
-import { v2 as cloudinary } from 'cloudinary'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
 
 export async function GET() {
   try {
     // Generate upload signature for direct client-side upload
     const timestamp = Math.round(new Date().getTime() / 1000)
     const folder = 'flipbookly/pdfs'
+    const resource_type = 'raw'
     
-    const signature = cloudinary.utils.api_sign_request(
-      {
-        timestamp,
-        folder,
-        resource_type: 'raw',
-      },
-      process.env.CLOUDINARY_API_SECRET!
-    )
+    // Parameters must be sorted alphabetically for signature
+    // Format: param1=value1&param2=value2 (sorted alphabetically)
+    const params: Record<string, string> = {
+      folder,
+      resource_type,
+      timestamp: timestamp.toString(),
+    }
+    
+    // Sort parameters alphabetically and create signature string
+    const sortedParams = Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key]}`)
+      .join('&')
+    
+    // Generate SHA-1 signature
+    const signature = crypto
+      .createHash('sha1')
+      .update(sortedParams + (process.env.CLOUDINARY_API_SECRET || ''))
+      .digest('hex')
 
     return NextResponse.json({
       signature,
@@ -30,7 +36,7 @@ export async function GET() {
       cloudName: process.env.CLOUDINARY_CLOUD_NAME,
       apiKey: process.env.CLOUDINARY_API_KEY,
       folder,
-      resourceType: 'raw',
+      resourceType: resource_type,
     })
   } catch (error) {
     console.error('Error generating upload signature:', error)
@@ -40,5 +46,6 @@ export async function GET() {
     )
   }
 }
+
 
 
