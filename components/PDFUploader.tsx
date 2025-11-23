@@ -36,36 +36,68 @@ export default function PDFUploader() {
     setUploadProgress(0)
 
     try {
-      // Upload PDF to Cloudinary
-      const formData = new FormData()
-      formData.append('file', file)
+      // Get upload signature from API
+      const signatureResponse = await fetch('/api/upload/signature')
+      if (!signatureResponse.ok) {
+        throw new Error('Failed to get upload signature')
+      }
+      const signatureData = await signatureResponse.json()
 
-      const uploadResponse = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      // Upload directly to Cloudinary (bypasses Vercel body size limit)
+      const cloudinaryFormData = new FormData()
+      cloudinaryFormData.append('file', file)
+      cloudinaryFormData.append('api_key', signatureData.apiKey)
+      cloudinaryFormData.append('timestamp', signatureData.timestamp.toString())
+      cloudinaryFormData.append('signature', signatureData.signature)
+      cloudinaryFormData.append('folder', signatureData.folder)
+      cloudinaryFormData.append('resource_type', signatureData.resourceType)
+
+      // Upload with progress tracking
+      const xhr = new XMLHttpRequest()
+      
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100
+          setUploadProgress(Math.round(percentComplete))
+        }
       })
 
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text()
-        let errorMessage = 'Upload failed'
-        try {
-          const errorJson = JSON.parse(errorText)
-          errorMessage = errorJson.error || errorMessage
-        } catch {
-          errorMessage = uploadResponse.statusText || errorMessage
-        }
-        throw new Error(errorMessage)
-      }
+      const uploadPromise = new Promise<string>((resolve, reject) => {
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            try {
+              const response = JSON.parse(xhr.responseText)
+              if (response.secure_url) {
+                resolve(response.secure_url)
+              } else {
+                reject(new Error('Upload failed: No URL returned'))
+              }
+            } catch (error) {
+              reject(new Error('Failed to parse upload response'))
+            }
+          } else {
+            try {
+              const error = JSON.parse(xhr.responseText)
+              reject(new Error(error.error?.message || 'Upload failed'))
+            } catch {
+              reject(new Error(`Upload failed with status ${xhr.status}`))
+            }
+          }
+        })
 
-      const uploadData = await uploadResponse.json()
+        xhr.addEventListener('error', () => {
+          reject(new Error('Upload failed: Network error'))
+        })
 
-      if (!uploadData.success || !uploadData.url) {
-        throw new Error(uploadData.error || 'Upload failed')
-      }
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${signatureData.cloudName}/raw/upload`)
+        xhr.send(cloudinaryFormData)
+      })
+
+      const pdfUrl = await uploadPromise
 
       setUploading(false)
       setUploadProgress(100)
-      setUploadedPdfUrl(uploadData.url)
+      setUploadedPdfUrl(pdfUrl)
 
       // Detect orientation
       const detectResponse = await fetch('/api/detect-orientation', {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { uploadToCloudinary } from '@/lib/cloudinary'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // 60 seconds for large file uploads
 
 export async function POST(request: NextRequest) {
   try {

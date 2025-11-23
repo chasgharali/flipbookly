@@ -2,6 +2,9 @@
   "functions": {
     "app/api/books/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/upload/route.ts": {
+      "maxDuration": 300
     }
   }
 }
