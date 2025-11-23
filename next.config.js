@@ -9,7 +9,7 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['canvas', 'pdfjs-dist'],
+    serverComponentsExternalPackages: ['@napi-rs/canvas', 'pdfjs-dist'],
   },
 }
 

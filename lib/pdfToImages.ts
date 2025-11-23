@@ -1,4 +1,4 @@
-import { createCanvas } from 'canvas'
+import { createCanvas } from '@napi-rs/canvas'
 import { uploadToCloudinary } from './cloudinary'
 
 // Polyfill for Promise.withResolvers (Node.js 18 compatibility)
