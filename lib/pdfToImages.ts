@@ -27,14 +27,18 @@ interface ConvertPDFToImagesResult {
 
 export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToImagesOptions): Promise<ConvertPDFToImagesResult> {
   try {
+    // Disable worker before loading pdfjs-dist
+    // This prevents worker setup errors in Node.js/serverless environments
+    if (typeof global !== 'undefined') {
+      (global as any).pdfjsWorker = null
+    }
+    
     // Use require for CommonJS import to avoid ESM issues
     // This ensures the polyfill is applied before pdfjs-dist loads
     const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
 
-    // Set up the worker for Node.js environment
-    // Use the legacy worker which is compatible with Node.js 18
-    const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath
+    // Disable worker in Node.js environment (not needed for server-side rendering)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 
     // Fetch the PDF
     const response = await fetch(pdfUrl)
@@ -101,9 +105,14 @@ export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToIm
 // Helper function to detect PDF orientation
 export async function detectPDFOrientation(pdfUrl: string): Promise<'portrait' | 'landscape' | null> {
   try {
+    // Disable worker before loading pdfjs-dist
+    if (typeof global !== 'undefined') {
+      (global as any).pdfjsWorker = null
+    }
+    
     const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
-    const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath
+    // Disable worker in Node.js environment
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 
     const response = await fetch(pdfUrl)
     const arrayBuffer = await response.arrayBuffer()
