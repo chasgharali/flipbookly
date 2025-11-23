@@ -10,11 +10,10 @@ export async function GET() {
     const folder = 'flipbookly/pdfs'
     const resource_type = 'raw'
     
-    // Parameters must be sorted alphabetically for signature
-    // Format: param1=value1&param2=value2 (sorted alphabetically)
+    // Parameters to sign (resource_type is NOT included in signature)
+    // Cloudinary excludes: file, cloud_name, resource_type, and api_key from signature
     const params: Record<string, string> = {
       folder,
-      resource_type,
       timestamp: timestamp.toString(),
     }
     
