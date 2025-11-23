@@ -15,6 +15,78 @@ if (typeof (Promise as any).withResolvers === 'undefined') {
   }
 }
 
+// Helper function to safely load pdfjs-dist without worker
+function loadPdfJs(): any {
+  const Module = require('module')
+  const originalResolve = Module._resolveFilename
+  const path = require('path')
+
+  // Intercept module resolution to prevent worker file lookup
+  Module._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+    // Check if this is a worker-related request
+    // Handle both direct requests and relative paths from pdfjs-dist
+    const isWorkerRequest =
+      request.includes('pdf.worker') ||
+      request.endsWith('pdf.worker.js') ||
+      request === './pdf.worker.js' ||
+      request === 'pdf.worker.js' ||
+      // Check if parent is from pdfjs-dist and request is a relative worker path
+      (parent && parent.filename &&
+        parent.filename.includes('pdfjs-dist') &&
+        (request === './pdf.worker.js' || request.includes('worker')))
+
+    if (isWorkerRequest) {
+      // Return path to our stub worker file
+      try {
+        return path.resolve(__dirname, 'pdf.worker.stub.js')
+      } catch {
+        // Fallback - try to resolve the stub
+        const stubPath = path.join(__dirname, 'pdf.worker.stub.js')
+        return stubPath
+      }
+    }
+
+    try {
+      return originalResolve.apply(this, arguments as any)
+    } catch (error: any) {
+      // If resolution fails and it's a worker-related error, return a stub path
+      if (error.message && error.message.includes('pdf.worker')) {
+        return path.resolve(__dirname, 'pdf.worker.stub.js')
+      }
+      throw error
+    }
+  }
+
+  try {
+    // Set environment variable
+    process.env.PDFJS_DISABLE_WORKER = '1'
+
+    // Load pdfjs-dist
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+
+    // Disable worker completely - set before any operations
+    if (pdfjsLib.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+      pdfjsLib.GlobalWorkerOptions.workerPort = null
+      // Also try to disable worker initialization
+      if (typeof pdfjsLib.GlobalWorkerOptions.setWorkerSrc === 'function') {
+        pdfjsLib.GlobalWorkerOptions.setWorkerSrc('')
+      }
+    }
+
+    return pdfjsLib
+  } catch (error: any) {
+    // If loading fails due to worker, provide a helpful error
+    if (error.message && error.message.includes('pdf.worker')) {
+      throw new Error('Failed to load pdfjs-dist: Worker file resolution failed. This is a known issue in serverless environments.')
+    }
+    throw error
+  } finally {
+    // Restore original function
+    Module._resolveFilename = originalResolve
+  }
+}
+
 interface ConvertPDFToImagesOptions {
   pdfUrl: string
   orientation?: 'portrait' | 'landscape'
@@ -27,38 +99,22 @@ interface ConvertPDFToImagesResult {
 
 export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToImagesOptions): Promise<ConvertPDFToImagesResult> {
   try {
-    // Load pdfjs-dist with worker disabled
-    // We need to prevent worker initialization by mocking the worker path resolution
-    const Module = require('module')
-    const originalResolve = Module._resolveFilename
-
-    let pdfjsLib: any
-
-    // Temporarily override module resolution to prevent worker file lookup
-    Module._resolveFilename = function (request: string, parent: any) {
-      if (request.includes('pdf.worker.js') || request === './pdf.worker.js') {
-        // Return a dummy path to prevent actual file lookup
-        return require.resolve('pdfjs-dist/legacy/build/pdf.js')
-      }
-      return originalResolve.apply(this, arguments as any)
-    }
-
-    try {
-      pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
-
-      // Disable worker completely
-      if (pdfjsLib.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = null
-      }
-    } finally {
-      // Always restore original resolve
-      Module._resolveFilename = originalResolve
-    }
+    // Load pdfjs-dist with worker disabled using our helper
+    const pdfjsLib = loadPdfJs()
 
     // Fetch the PDF
     const response = await fetch(pdfUrl)
     const arrayBuffer = await response.arrayBuffer()
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+    // Load PDF with worker disabled explicitly
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: false,
+      disableAutoFetch: true,
+      disableStream: true,
+    }).promise
 
     const pageImageUrls: string[] = []
     const numPages = pdf.numPages
@@ -120,35 +176,21 @@ export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToIm
 // Helper function to detect PDF orientation
 export async function detectPDFOrientation(pdfUrl: string): Promise<'portrait' | 'landscape' | null> {
   try {
-    // Load pdfjs-dist with worker disabled (same approach as convertPDFToImages)
-    const Module = require('module')
-    const originalResolve = Module._resolveFilename
-
-    let pdfjsLib: any
-
-    // Temporarily override module resolution to prevent worker file lookup
-    Module._resolveFilename = function (request: string, parent: any) {
-      if (request.includes('pdf.worker.js') || request === './pdf.worker.js') {
-        return require.resolve('pdfjs-dist/legacy/build/pdf.js')
-      }
-      return originalResolve.apply(this, arguments as any)
-    }
-
-    try {
-      pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
-
-      // Disable worker completely
-      if (pdfjsLib.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = null
-      }
-    } finally {
-      // Always restore original resolve
-      Module._resolveFilename = originalResolve
-    }
+    // Load pdfjs-dist with worker disabled using our helper
+    const pdfjsLib = loadPdfJs()
 
     const response = await fetch(pdfUrl)
     const arrayBuffer = await response.arrayBuffer()
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+    // Load PDF with worker disabled explicitly
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: false,
+      disableAutoFetch: true,
+      disableStream: true,
+    }).promise
 
     if (pdf.numPages === 0) {
       return null
