@@ -27,18 +27,33 @@ interface ConvertPDFToImagesResult {
 
 export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToImagesOptions): Promise<ConvertPDFToImagesResult> {
   try {
-    // Disable worker before loading pdfjs-dist
-    // This prevents worker setup errors in Node.js/serverless environments
-    if (typeof global !== 'undefined') {
-      (global as any).pdfjsWorker = null
-    }
-    
-    // Use require for CommonJS import to avoid ESM issues
-    // This ensures the polyfill is applied before pdfjs-dist loads
-    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+    // Load pdfjs-dist with worker disabled
+    // We need to prevent worker initialization by mocking the worker path resolution
+    const Module = require('module')
+    const originalResolve = Module._resolveFilename
 
-    // Disable worker in Node.js environment (not needed for server-side rendering)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+    let pdfjsLib: any
+
+    // Temporarily override module resolution to prevent worker file lookup
+    Module._resolveFilename = function (request: string, parent: any) {
+      if (request.includes('pdf.worker.js') || request === './pdf.worker.js') {
+        // Return a dummy path to prevent actual file lookup
+        return require.resolve('pdfjs-dist/legacy/build/pdf.js')
+      }
+      return originalResolve.apply(this, arguments as any)
+    }
+
+    try {
+      pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+
+      // Disable worker completely
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = null
+      }
+    } finally {
+      // Always restore original resolve
+      Module._resolveFilename = originalResolve
+    }
 
     // Fetch the PDF
     const response = await fetch(pdfUrl)
@@ -105,14 +120,31 @@ export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToIm
 // Helper function to detect PDF orientation
 export async function detectPDFOrientation(pdfUrl: string): Promise<'portrait' | 'landscape' | null> {
   try {
-    // Disable worker before loading pdfjs-dist
-    if (typeof global !== 'undefined') {
-      (global as any).pdfjsWorker = null
+    // Load pdfjs-dist with worker disabled (same approach as convertPDFToImages)
+    const Module = require('module')
+    const originalResolve = Module._resolveFilename
+
+    let pdfjsLib: any
+
+    // Temporarily override module resolution to prevent worker file lookup
+    Module._resolveFilename = function (request: string, parent: any) {
+      if (request.includes('pdf.worker.js') || request === './pdf.worker.js') {
+        return require.resolve('pdfjs-dist/legacy/build/pdf.js')
+      }
+      return originalResolve.apply(this, arguments as any)
     }
-    
-    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
-    // Disable worker in Node.js environment
-    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+
+    try {
+      pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+
+      // Disable worker completely
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = null
+      }
+    } finally {
+      // Always restore original resolve
+      Module._resolveFilename = originalResolve
+    }
 
     const response = await fetch(pdfUrl)
     const arrayBuffer = await response.arrayBuffer()
