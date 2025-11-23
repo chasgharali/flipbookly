@@ -4,6 +4,8 @@ import { convertPDFToImages } from '@/lib/pdfToImages'
 import { nanoid } from 'nanoid'
 import { getUserFromToken, getTokenFromRequest } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

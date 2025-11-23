@@ -217,6 +217,16 @@ export default function FlipbookViewer({ pages, title, orientation }: FlipbookVi
             maxWidth: '95vw',
             maxHeight: '95vh'
           }}
+          startPage={0}
+          drawShadow={true}
+          flippingTime={800}
+          startZIndex={0}
+          autoSize={false}
+          clickEventForward={true}
+          useMouseEvents={true}
+          swipeDistance={30}
+          showPageCorners={true}
+          disableFlipByClick={false}
         >
           {pages.map((page, index) => (
             <div
