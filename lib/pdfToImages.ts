@@ -30,7 +30,7 @@ export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToIm
     // Use require for CommonJS import to avoid ESM issues
     // This ensures the polyfill is applied before pdfjs-dist loads
     const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
-    
+
     // Set up the worker for Node.js environment
     // Use the legacy worker which is compatible with Node.js 18
     const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js')
@@ -58,7 +58,7 @@ export async function convertPDFToImages({ pdfUrl, orientation }: ConvertPDFToIm
     // Convert each page to an image
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       const page = await pdf.getPage(pageNum)
-      
+
       // Set scale for high quality (2x for retina)
       const scale = 2.0
       const viewport = page.getViewport({ scale })
@@ -115,7 +115,7 @@ export async function detectPDFOrientation(pdfUrl: string): Promise<'portrait' |
 
     const firstPage = await pdf.getPage(1)
     const viewport = firstPage.getViewport({ scale: 1.0 })
-    
+
     return viewport.width > viewport.height ? 'landscape' : 'portrait'
   } catch (error) {
     console.error('Error detecting PDF orientation:', error)
